@@ -2,11 +2,12 @@
 # author: indiff
 set -xe
 
-
-
-PROTOC_BASENAME=$(basename $VCPKG_ROOT/installed/x64-linux-dynamic/tools/protobuf/protoc-*)
-PROTOC_LIB_BASENAME=$(basename $VCPKG_ROOT/installed/x64-linux-dynamic/lib/libprotoc.so.*)
-chmod +x $VCPKG_ROOT/installed/x64-linux-dynamic/tools/protobuf/$PROTOC_BASENAME
+find /opt/vcpkg/installed -name "*.so*"
+find /opt/vcpkg/installed -name "*.a*"
+PROTOC_BASENAME=$(basename $(find /opt/vcpkg/installed/x64-linux-dynamic/tools/protobuf -maxdepth 1 -name "protoc-*" | head -1))
+#PROTOC_LIB_BASENAME=$(basename $(find /opt/vcpkg/installed/x64-linux-dynamic/lib -maxdepth 1 -name "libprotoc*.so*" | head -1))
+LIBPROTOBUF_BASENAME=libprotobuf.so
+chmod +x /opt/vcpkg/installed/x64-linux-dynamic/tools/protobuf/${PROTOC_BASENAME}
 
 if [[ -z "$MYSQL_BRANCH" ]]; then
     git clone --filter=blob:none --depth 1 https://github.com/mysql/mysql-server.git server
@@ -65,6 +66,20 @@ for d in lib lib64; do
 rsync -a "$DEPS_SRC/$d/pkgconfig/" "$DEPS_DST/$d/pkgconfig/" 2>/dev/null || true
 done
 
+export CC="/opt/gcc-indiff/bin/gcc"
+export CXX="/opt/gcc-indiff/bin/g++"
+export CPPFLAGS="-I$DEPS_DST/include"
+export LDFLAGS="-L/opt/gcc-indiff/lib64 -L$DEPS_DST/lib -L$DEPS_DST/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} -fuse-ld=mold"
+export ACLOCAL_PATH=/usr/share/aclocal:${ACLOCAL_PATH:-}
+git clone --filter=blob:none --depth 1 https://github.com/cyrusimap/cyrus-sasl.git
+cd cyrus-sasl
+autoreconf -fi
+./configure --with-openssl="$DEPS_DST" --prefix="$DEPS_DST"
+make -j$(nproc)
+make install
+cd ..
+unset CPPFLAGS
+unset LDFLAGS
 # 显示一下目录接口查看是否存在相关的 lib 和 include
 # tree "$DEPS_DST"/{include,lib,lib64} | tee /workspace/deps_dst_tree.txt
 tree "$DEPS_DST"/{include,lib,lib64} > /workspace/deps_dst_tree.txt
@@ -94,9 +109,11 @@ cmake .. -G Ninja \
     -DCMAKE_C_FLAGS="-I$DEPS_DST/include -O2 -march=native -pipe -fPIC -DPIC " \
     -DCMAKE_CXX_FLAGS="-include cstdint -include cstddef -I$DEPS_DST/include -O2 -pipe -fPIC -DPIC -march=native " \
     -DCMAKE_CXX_EXTENSIONS=OFF \
-    -DCMAKE_EXE_LINKER_FLAGS="-L/usr/lib64 -L$DEPS_DST/lib -L$DEPS_DST/lib64 -Wl,--strip-all -Wl,--gc-sections -Wl,--no-as-needed -ldl" \
+    -DCMAKE_EXE_LINKER_FLAGS="-L/opt/vcpkg/installed/x64-linux/lib -L/usr/lib64 -L$DEPS_DST/lib -L$DEPS_DST/lib64 -Wl,--strip-all -Wl,--gc-sections -Wl,--no-as-needed -ldl" \
     -DCMAKE_SHARED_LINKER_FLAGS="-L/usr/lib64 -L$DEPS_DST/lib -L$DEPS_DST/lib64 -Wl,--strip-all -Wl,--gc-sections -Wl,--no-as-needed -ldl" \
     -DCMAKE_MODULE_LINKER_FLAGS="-L/usr/lib64 -L$DEPS_DST/lib -L$DEPS_DST/lib64 -Wl,--strip-all -Wl,--gc-sections -Wl,--no-as-needed -ldl" \
+    -DCMAKE_TOOLCHAIN_FILE="/opt/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+    -DVCPKG_TARGET_TRIPLET="x64-linux" \
     -DDEFAULT_CHARSET="utf8mb4" \
     -DDEFAULT_COLLATION="utf8mb4_bin" \
     -DFORCE_INSOURCE_BUILD=ON \
@@ -114,26 +131,9 @@ cmake .. -G Ninja \
     -DWITH_FEDERATED_STORAGE_ENGINE=OFF \
     -DWITH_EXAMPLE_STORAGE_ENGINE=ON \
     -DWITH_INNODB_MEMCACHED=ON \
+    -DWITH_PERFORMANCE_SCHEMA=ON \
     -DWITH_ROUTER=OFF \
     -DWITH_BOOST="/workspace/server/extra/boost/boost_1_87_0" \
-    -DDISABLE_PSI_COND=1 \
-    -DDISABLE_PSI_DATA_LOCK=1 \
-    -DDISABLE_PSI_ERROR=1 \
-    -DDISABLE_PSI_FILE=1 \
-    -DDISABLE_PSI_IDLE=1 \
-    -DDISABLE_PSI_MEMORY=1 \
-    -DDISABLE_PSI_METADATA=1 \
-    -DDISABLE_PSI_MUTEX=1 \
-    -DDISABLE_PSI_PS=1 \
-    -DDISABLE_PSI_RWLOCK=1 \
-    -DDISABLE_PSI_SOCKET=1 \
-    -DDISABLE_PSI_SP=1 \
-    -DDISABLE_PSI_STAGE=0 \
-    -DDISABLE_PSI_STATEMENT=1 \
-    -DDISABLE_PSI_STATEMENT_DIGEST=1 \
-    -DDISABLE_PSI_TABLE=1 \
-    -DDISABLE_PSI_THREAD=0 \
-    -DDISABLE_PSI_TRANSACTION=1 \
     -DWITH_MYSQLX=OFF \
     -DWITH_NDB=OFF \
     -DWITH_CNO=OFF \
@@ -141,6 +141,7 @@ cmake .. -G Ninja \
     -DMAX_INDEXES=128 \
     -DWITH_AUTHENTICATION_LDAP=OFF \
     -DWITH_LTO=ON \
+    -DWITH_RAPIDJSON=bundled -DWITH_EDITLINE=bundled -DWITH_READLINE=bundled  \
     -DWITH_MYSQLX=0 -DWITH_NDBCLUSTER_STORAGE_ENGINE=OFF -DWITH_NDBMTD=OFF \
     -DWITH_LDAP=OFF -DWITH_SASL=OFF \
     -DWITH_EXT_BACKTRACE=OFF \
@@ -153,8 +154,11 @@ cmake .. -G Ninja \
     -DWITH_UNIT_TESTS=0 \
     -DWITH_ICU=system \
     -DWITH_PROTOBUF=system  \
-    -DPROTOBUF_PROTOC_LIBRARY="$DEPS_DST/lib/$PROTOC_LIB_BASENAME"  \
+    -DPROTOBUF_INCLUDE_DIR="/opt/mysql/include" \
+    -DPROTOBUF_LIBRARY="$DEPS_DST/lib/$LIBPROTOBUF_BASENAME" \
     -DPROTOBUF_PROTOC_EXECUTABLE="$VCPKG_ROOT/installed/x64-linux-dynamic/tools/protobuf/$PROTOC_BASENAME"  \
+    -DPROTOBUF_PROTOC_LIBRARY="/opt/vcpkg/installed/x64-linux-dynamic/lib/libprotoc.so" \
+    -DPROTOBUF_LITE_LIBRARY="/opt/vcpkg/installed/x64-linux-dynamic/lib/libprotobuf-lite.so" \
     -DWITH_LIBEVENT=system -DWITH_LZ4=system -DWITH_ZLIB=system -DWITH_ZSTD=system \
     -DCMAKE_INSTALL_RPATH='$ORIGIN/../lib64:$ORIGIN/../lib' \
     -DCMAKE_BUILD_RPATH='$ORIGIN/../lib64:$ORIGIN/../lib' \

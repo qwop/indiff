@@ -2,9 +2,12 @@
 # author: indiff
 set -xe
 
-PROTOC_BASENAME=$(basename $VCPKG_ROOT/installed/x64-linux-dynamic/tools/protobuf/protoc-*)
-PROTOC_LIB_BASENAME=$(basename $VCPKG_ROOT/installed/x64-linux-dynamic/lib/libprotoc.so.*)
-chmod +x "$VCPKG_ROOT/installed/x64-linux-dynamic/tools/protobuf/$PROTOC_BASENAME"
+find /opt/vcpkg/installed -name "*.so*"
+find /opt/vcpkg/installed -name "*.a*"
+PROTOC_BASENAME=$(basename $(find /opt/vcpkg/installed/x64-linux-dynamic/tools/protobuf -maxdepth 1 -name "protoc-*" | head -1))
+#PROTOC_LIB_BASENAME=$(basename $(find /opt/vcpkg/installed/x64-linux-dynamic/lib -maxdepth 1 -name "libprotoc*.so*" | head -1))
+LIBPROTOBUF_BASENAME=libprotobuf.so
+chmod +x /opt/vcpkg/installed/x64-linux-dynamic/tools/protobuf/${PROTOC_BASENAME}
 # wget https://archives.boost.io/release/1.89.0/source/boost_1_89_0.tar.bz2
 # mkdir -p /tmp/boost
 # tar -xjf boost_1_89_0.tar.bz2 -C /tmp/boost --strip-components=1
@@ -63,6 +66,24 @@ for d in lib lib64; do
 rsync -a "$DEPS_SRC/$d/pkgconfig/" "$DEPS_DST/$d/pkgconfig/" 2>/dev/null || true
 done
 
+export CC="/opt/gcc-indiff/bin/gcc"
+export CXX="/opt/gcc-indiff/bin/g++"
+export CPPFLAGS="-I$DEPS_DST/include"
+export LDFLAGS="-L/opt/gcc-indiff/lib64 -L$DEPS_DST/lib -L$DEPS_DST/lib64${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH} -fuse-ld=mold"
+export ACLOCAL_PATH=/usr/share/aclocal:${ACLOCAL_PATH:-}
+
+# export CFLAGS="-Wall "
+# --with-staticsasl
+
+git clone --filter=blob:none --depth 1 https://github.com/cyrusimap/cyrus-sasl.git
+cd cyrus-sasl
+autoreconf -fi
+./configure --with-openssl="$DEPS_DST" --prefix="$DEPS_DST"
+make -j$(nproc)
+make install
+cd ..
+unset CPPFLAGS
+unset LDFLAGS
 # 显示一下目录接口查看是否存在相关的 lib 和 include
 # tree "$DEPS_DST"/{include,lib,lib64} | tee /workspace/deps_dst_tree.txt
 tree "$DEPS_DST"/{include,lib,lib64} > /workspace/deps_dst_tree.txt
@@ -98,11 +119,15 @@ cmake .. -G Ninja \
     -DCMAKE_CXX_FLAGS="-std=c++20 -include cstdint -include cstddef -I$DEPS_DST/include -O2 -pipe -fPIC -DPIC -march=native -Wno-aligned-new -Wno-implicit-fallthrough -Wno-int-in-bool-context -Wno-shift-negative-value -Wno-misleading-indentation -Wno-format-overflow -Wno-nonnull -Wno-unused-function  " \
     -DCMAKE_CXX_EXTENSIONS=OFF \
     -DENABLE_DTRACE=0 \
-    -DCMAKE_EXE_LINKER_FLAGS="-L/usr/lib64 -L$DEPS_DST/lib -L$DEPS_DST/lib64 -Wl,--strip-all -Wl,--gc-sections -Wl,--no-as-needed -ldl" \
+    -DCMAKE_EXE_LINKER_FLAGS="-L/opt/vcpkg/installed/x64-linux/lib -L/usr/lib64 -L$DEPS_DST/lib -L$DEPS_DST/lib64 -lpthread $(pkg-config --static --libs protobuf) -Wl,--strip-all -Wl,--gc-sections -Wl,--no-as-needed -ldl" \
     -DCMAKE_SHARED_LINKER_FLAGS="-L/usr/lib64 -L$DEPS_DST/lib -L$DEPS_DST/lib64 -Wl,--strip-all -Wl,--gc-sections -Wl,--no-as-needed -ldl" \
     -DCMAKE_MODULE_LINKER_FLAGS="-L/usr/lib64 -L$DEPS_DST/lib -L$DEPS_DST/lib64 -Wl,--strip-all -Wl,--gc-sections -Wl,--no-as-needed -ldl" \
+    -DCMAKE_TOOLCHAIN_FILE="/opt/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+    -DVCPKG_TARGET_TRIPLET="x64-linux" \
+    -DHAVE_PSI_INTERFACE=ON \
     -DDEFAULT_CHARSET="utf8mb4" \
     -DDEFAULT_COLLATION="utf8mb4_bin" \
+    -DENABLED_LOCAL_INFILE=1 \
     -DWITH_BOOST="/tmp/boost" \
     -DWITH_TESTS=0 \
     -DWITH_BENCHMARK_TOOLS=0 \
@@ -113,21 +138,26 @@ cmake .. -G Ninja \
     -DWITH_NDB_JAVA=0 \
     -DWITH_RAPID=0 \
     -DWITH_ROUTER=0 \
-    -DWITH_UNIT_TESTS=0 \
+    -DWITH_UNIT_TESTS=OFF \
+    -DWITH_RAPIDJSON=bundled -DWITH_EDITLINE=bundled -DWITH_READLINE=bundled  \
     -DWITH_ROCKSDB=ON \
     -DWITH_INNODB_MEMCACHED=ON \
     -DWITH_CURL=system \
     -DWITH_LIBEVENT=system \
     -DWITH_ZLIB=system -DWITH_LZ4=system -DWITH_ZSTD=system -DWITH_SNAPPY=system \
-    -DWITH_PROTOBUF=system  \
-    -DPROTOBUF_PROTOC_LIBRARY="$DEPS_DST/lib/$PROTOC_LIB_BASENAME"  \
-    -DPROTOBUF_PROTOC_EXECUTABLE="$VCPKG_ROOT/installed/x64-linux-dynamic/tools/protobuf/$PROTOC_BASENAME"  \
-    -DWITH_ICU=system  \
+    -DWITH_PROTOBUF=system \
+    -DPROTOBUF_INCLUDE_DIR="/opt/fbmysql/include" \
+    -DPROTOBUF_LIBRARY="/opt/vcpkg/installed/x64-linux-dynamic/lib/libprotobuf.so" \
+    -DPROTOBUF_PROTOC_EXECUTABLE="/opt/vcpkg/installed/x64-linux-dynamic/tools/protobuf/$PROTOC_BASENAME"  \
+    -DPROTOBUF_PROTOC_LIBRARY="/opt/vcpkg/installed/x64-linux-dynamic/lib/libprotoc.so" \
+    -DPROTOBUF_LITE_LIBRARY="/opt/vcpkg/installed/x64-linux-dynamic/lib/libprotobuf-lite.so" \
+    -DWITH_ICU=system \
     -DWITH_SSL=system -DOPENSSL_ROOT_DIR="$DEPS_DST" \
     -DWITH_FIDO=system \
     -DWITH_MECAB=OFF \
     -DWITH_EXT_BACKTRACE=OFF \
     -DWITH_NUMA=OFF \
+    -DWITH_PERFORMANCE_SCHEMA=ON -DWITH_MYISAM=ON -DENABLE_PSI=1 -DHAVE_PSI_INTERFACE=1 \
     -DWITH_ARCHIVE_STORAGE_ENGINE=OFF \
     -DWITH_BLACKHOLE_STORAGE_ENGINE=OFF \
     -DWITH_EXAMPLE_STORAGE_ENGINE=ON \
@@ -160,6 +190,8 @@ rm -f $DEPS_DST/bin/ps-admin
 rm -f $DEPS_DST/bin/mysqltest
 rm -f $DEPS_DST/bin/mysqlxtest
 rm -f $DEPS_DST/bin/mytap
+rm -f $DEPS_DST/lib/*.a
+rm -f $DEPS_DST/lib64/*.a
 zip -r -q -9 /workspace/fbmysql-centos7-x86_64-$FBMYSQL_BRANCH-$(date +'%Y%m%d_%H%M').xz .
 
 # free memory

@@ -3,6 +3,13 @@
 set -xe
 
 
+find /opt/vcpkg/installed -name "*.so*"
+find /opt/vcpkg/installed -name "*.a*"
+
+PROTOC_BASENAME=$(basename $(find /opt/vcpkg/installed/x64-linux-dynamic/tools/protobuf -maxdepth 1 -name "protoc-*" | head -1))
+#PROTOC_LIB_BASENAME=$(basename $(find /opt/vcpkg/installed/x64-linux-dynamic/lib -maxdepth 1 -name "libprotoc*.so*" | head -1))
+LIBPROTOBUF_BASENAME=libprotobuf.so
+chmod +x /opt/vcpkg/installed/x64-linux-dynamic/tools/protobuf/${PROTOC_BASENAME}
 
 TRIPLET=x64-linux
 DEPS_SRC="$VCPKG_ROOT/installed/$TRIPLET"
@@ -228,17 +235,38 @@ sed -i 's/\bin_range\b/__in_range/g' /opt/gcc-indiff/include/c++/16/bits/intcmp.
 cmake .. -G Ninja \
     -DCMAKE_C_FLAGS="-I$DEPS_DST/include  -O2 -march=native " \
     -DCMAKE_CXX_FLAGS="-I$DEPS_DST/include  -O2 -march=native " \
-    -DCMAKE_PREFIX_PATH="$DEPS_DST/lib" \
+    -DCMAKE_PREFIX_PATH="$DEPS_DST" \
     -DCMAKE_INSTALL_PREFIX="$DEPS_DST" \
-    -DCMAKE_EXE_LINKER_FLAGS="-L/usr/lib64 -L/opt/gcc-indiff/lib64 -L$DEPS_DST/lib -fuse-ld=mold -Wl,--strip-all -Wl,--gc-sections -Wl,--no-as-needed -ldl " \
+    -DCMAKE_EXE_LINKER_FLAGS="-L/opt/vcpkg/installed/x64-linux/lib -L/usr/lib64 -L/opt/gcc-indiff/lib64 -L$DEPS_DST/lib -Wl,--strip-all -Wl,--gc-sections -Wl,--no-as-needed -ldl " \
     -DCMAKE_SHARED_LINKER_FLAGS="-L/usr/lib64 -L/opt/gcc-indiff/lib64 -L$DEPS_DST/lib -L$DEPS_DST/lib64 -Wl,--strip-all -Wl,--gc-sections -Wl,--no-as-needed -ldl" \
     -DCMAKE_MODULE_LINKER_FLAGS="-L/usr/lib64 -L/opt/gcc-indiff/lib64 -L$DEPS_DST/lib -L$DEPS_DST/lib64 -Wl,--strip-all -Wl,--gc-sections -Wl,--no-as-needed -ldl" \
+    -DCMAKE_TOOLCHAIN_FILE="/opt/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+    -DVCPKG_TARGET_TRIPLET="x64-linux" \
+    -DWITH_COMPONENT_KEYRING_VAULT=ON \
+    -DBUILD_CONFIG=mysql_release \
+    -DWITH_PACKAGE_FLAGS=OFF \
+    -DWITH_PROTOBUF=system \
+    -DPROTOBUF_INCLUDE_DIR="/opt/percona80/include" \
+    -DPROTOBUF_LIBRARY="/opt/vcpkg/installed/x64-linux-dynamic/lib/libprotobuf.so" \
+    -DPROTOBUF_PROTOC_EXECUTABLE="/opt/vcpkg/installed/x64-linux-dynamic/tools/protobuf/$PROTOC_BASENAME"  \
+    -DPROTOBUF_PROTOC_LIBRARY="/opt/vcpkg/installed/x64-linux-dynamic/lib/libprotoc.so" \
+    -DPROTOBUF_LITE_LIBRARY="/opt/vcpkg/installed/x64-linux-dynamic/lib/libprotobuf-lite.so" \
     -DWITH_BOOST=boost -DDOWNLOAD_BOOST=1 -DWITH_BOOST=../boost \
+    -DMYSQL_MAINTAINER_MODE=OFF \
     -DWITH_ROCKSDB=ON \
+    -DWITH_MECAB=OFF \
+    -DWITH_LIBEVENT=system \
+    -DWITH_ZLIB=system \
+    -DWITH_CURL=system \
+    -DWITH_FIDO=system \
+    -DWITH_RAPIDJSON=bundled -DWITH_EDITLINE=bundled -DWITH_READLINE=bundled  \
+    -DWITH_EXT_BACKTRACE=OFF \
     -DWITH_LZ4=system -DWITH_ZSTD=system -DWITH_SNAPPY=system -DWITH_JEMALLOC=system \
-    -DWITH_SSL=system -DOPENSSL_ROOT_DIR="$DEPS_DST" \
+    -DWITH_SSL=system -DOPENSSL_ROOT_DIR="$DEPS_DST/include" -DOPENSSL_USE_STATIC_LIBS=ON \
+    -DOPENSSL_SSL_LIBRARY="$DEPS_DST/lib/libssl.so" \
+    -DOPENSSL_CRYPTO_LIBRARY="$DEPS_DST/lib/libcrypto.so" \
     -DWITH_ICU=system \
-    -DWITH_PROTOBUF=bundled  \
+    -DWITH_SYSTEM_LIBS=ON \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_RPATH='$ORIGIN/../lib:$ORIGIN/../lib64' \
     -DCMAKE_BUILD_RPATH='/opt/gcc-indiff/lib64:$ORIGIN/../lib:$ORIGIN/../lib64' \
@@ -251,6 +279,19 @@ cmake .. -G Ninja \
     -DWITH_XPLUGIN_TESTS=0 \
     -DWITH_NUMA=1 \
     -DALLOW_NO_SSE42=ON \
+    -DWITH_PERCONA_AUTHENTICATION_LDAP=OFF \
+    -DWITH_ROUTER=OFF \
+    -DWITH_UNIT_TESTS=OFF \
+    -DWITH_NUMA=OFF \
+    -DWITH_NDB=OFF \
+    -DWITH_NDBCLUSTER=OFF \
+    -DWITH_NDB_JAVA=OFF \
+    -DWITH_PERFORMANCE_SCHEMA=ON -DWITH_PSI=ON -DWITH_MYISAM=ON -DENABLE_PSI=1 -DHAVE_PSI_INTERFACE=1 \
+    -DWITH_ARCHIVE_STORAGE_ENGINE=OFF \
+    -DWITH_BLACKHOLE_STORAGE_ENGINE=OFF \
+    -DWITH_EXAMPLE_STORAGE_ENGINE=ON \
+    -DWITH_FEDERATED_STORAGE_ENGINE=OFF \
+    -DWITH_INNODB_MEMCACHED=ON \
     -DWITH_DOCS=OFF -DWITH_MAN_PAGES=OFF -DMYSQL_SERVER_SUFFIX="-indiff"
 
 cmake -LAH -N . | tee /workspace/cmake-cache-vars-centos7.txt
@@ -261,7 +302,9 @@ cmake --build . -j"$(nproc)" --target install
 cmake --install .
 
 cd $DEPS_DST
+rm -rf $DEPS_DST/sql-bench
 rm -rf $DEPS_DST/man
+rm -rf $DEPS_DST/mariadb-test
 rm -rf $DEPS_DST/mysql-test
 rm -rf $DEPS_DST/bin/mysqld-debug
 rm -rf $DEPS_DST/sbin/mysqld-debug
