@@ -264,7 +264,7 @@ cmake .. -G Ninja \
     -DWITH_ZLIB=system \
     -DWITH_CURL=system \
     -DWITH_FIDO=system \
-    -DWITH_RAPIDJSON=bundled -DWITH_EDITLINE=bundled -DWITH_READLINE=bundled  \
+    -DWITH_RAPIDJSON=bundled -DWITH_EDITLINE=bundled \
     -DWITH_EXT_BACKTRACE=OFF \
     -DWITH_LZ4=system -DWITH_ZSTD=system -DWITH_SNAPPY=system -DWITH_JEMALLOC=system \
     -DWITH_SSL=system -DOPENSSL_ROOT_DIR="$DEPS_DST/include" -DOPENSSL_USE_STATIC_LIBS=ON \
