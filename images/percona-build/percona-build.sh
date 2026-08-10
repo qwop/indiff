@@ -2,7 +2,10 @@
 # author: indiff
 set -xe
 
-
+CC=/opt/gcc-indiff/bin/gcc CXX=/opt/gcc-indiff/bin/g++ LDOPTS="-fuse-ld=mold -Wl,--strip-all -Wl,--gc-sections " $VCPKG_ROOT/vcpkg install \
+            protobuf[core,libprotoc] \
+            --triplet x64-linux-dynamic --clean-after-build \
+            || cat /workspace/vcpkg/installed/vcpkg/issue_body.md
 find /opt/vcpkg/installed -name "*.so*"
 find /opt/vcpkg/installed -name "*.a*"
 
