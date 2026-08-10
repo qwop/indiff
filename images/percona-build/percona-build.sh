@@ -1,7 +1,9 @@
 #!/bin/bash
 # author: indiff
 set -xe
-
+cd /opt/vcpkg
+git pull
+sh /opt/vcpkg/bootstrap-vcpkg.sh
 CC=/opt/gcc-indiff/bin/gcc CXX=/opt/gcc-indiff/bin/g++ LDOPTS="-fuse-ld=mold -Wl,--strip-all -Wl,--gc-sections " $VCPKG_ROOT/vcpkg install \
             protobuf[core,libprotoc] \
             --triplet x64-linux-dynamic --clean-after-build \
